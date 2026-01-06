@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-// ⚠️ MongoDB URI එක කෙලින්ම කෝඩ් එකට ඇතුළත් කළා
 const MONGO_URI = "mongodb+srv://zanta-md:Akashkavindu12345@cluster0.iw4vklq.mongodb.net/?appName=Cluster0";
 
 const SettingsSchema = new mongoose.Schema({
@@ -20,38 +19,42 @@ const SettingsSchema = new mongoose.Schema({
 const Settings = mongoose.models.Settings || mongoose.model('Settings', SettingsSchema);
 
 export default async function handler(req, res) {
-    // CORS Settings (Netlify එකට access දීමට)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // Database Connection
     if (mongoose.connection.readyState !== 1) {
-        await mongoose.connect(MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-        });
+        await mongoose.connect(MONGO_URI);
     }
 
-    const { id, password } = req.body;
+    const { id, password, action, newSettings } = req.body;
 
     try {
         const user = await Settings.findOne({ id: id });
 
-        if (!user) return res.status(404).json({ error: "User not found! (.settings මගින් බොට්ව setup කරන්න)" });
-        
-        if (user.password === "not_set") {
-            return res.status(401).json({ error: "Please set a password via Bot first! (.settings)" });
-        }
-        
-        if (user.password !== password) {
-            return res.status(401).json({ error: "Invalid Password!" });
+        if (!user) return res.status(404).json({ error: "User not found!" });
+
+        // --- 1. ලොගින් පරීක්ෂාව (Login Logic) ---
+        if (action === "login") {
+            if (user.password === "not_set") return res.status(401).json({ error: "Please set a password via Bot first!" });
+            if (user.password !== password) return res.status(401).json({ error: "Invalid Password!" });
+            return res.status(200).json({ success: true, settings: user });
         }
 
-        // Password හරි නම් user settings යවන්න
-        return res.status(200).json({ success: true, settings: user });
+        // --- 2. සෙටින්ග්ස් වෙනස් කිරීම (Update Logic) ---
+        if (action === "update") {
+            // මෙතනදී Password එකත් එවන්න ඕනේ ආරක්ෂාවට
+            if (user.password !== password) return res.status(401).json({ error: "Unauthorized update!" });
+
+            const updated = await Settings.findOneAndUpdate(
+                { id: id },
+                { $set: newSettings },
+                { new: true, lean: true }
+            );
+            return res.status(200).json({ success: true, settings: updated });
+        }
 
     } catch (e) {
         return res.status(500).json({ error: "Database Error: " + e.message });
