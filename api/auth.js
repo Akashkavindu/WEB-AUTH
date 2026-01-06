@@ -1,6 +1,22 @@
 const mongoose = require('mongoose');
 
-const MONGO_URI = "mongodb+srv://zanta-md:Akashkavindu12345@cluster0.iw4vklq.mongodb.net/?appName=Cluster0";
+const MONGO_URI = "mongodb+srv://zanta-md:Akashkavindu12345@cluster0.iw4vklq.mongodb.net/test?retryWrites=true&w=majority";
+
+// Connection එක Cache කරන්න variable එකක්
+let cachedDb = null;
+
+async function connectToDatabase() {
+    if (cachedDb && mongoose.connection.readyState === 1) {
+        return cachedDb;
+    }
+    // Timeout එක අඩු කරලා වේගයෙන් connect වෙන්න හදනවා
+    cachedDb = await mongoose.connect(MONGO_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000 
+    });
+    return cachedDb;
+}
 
 const SettingsSchema = new mongoose.Schema({
     id: String,
@@ -15,7 +31,7 @@ const SettingsSchema = new mongoose.Schema({
     alwaysOnline: String,
     readCmd: String,
     autoVoice: String
-}, { collection: 'settings' }); // ඔයාගේ collection name එක 'settings' නිසා
+}, { collection: 'settings' });
 
 const Settings = mongoose.models.Settings || mongoose.model('Settings', SettingsSchema);
 
@@ -26,39 +42,30 @@ export default async function handler(req, res) {
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    if (mongoose.connection.readyState !== 1) {
-        await mongoose.connect(MONGO_URI);
-    }
-
-    const { id, password, action, settings } = req.body;
-
     try {
+        await connectToDatabase(); // වේගවත් connection එක
+
+        const { id, password, action, settings } = req.body;
         const user = await Settings.findOne({ id: id });
 
-        if (!user) return res.status(404).json({ error: "User not found!" });
+        if (!user) return res.status(404).json({ success: false, error: "User not found!" });
 
-        // --- 1. ලොගින් පරීක්ෂාව ---
         if (action === "login") {
-            if (user.password === "not_set") return res.status(401).json({ error: "Please set a password first!" });
-            if (user.password !== password) return res.status(401).json({ error: "Invalid Password!" });
+            if (user.password !== password) return res.status(401).json({ success: false, error: "Invalid Password!" });
             return res.status(200).json({ success: true, settings: user });
         }
 
-        // --- 2. සෙටින්ග්ස් අප්ඩේට් කිරීම ---
         if (action === "updateSettings") {
-            // ආරක්ෂාවට දැනට localStorage එකේ තියෙන Password එකත් එවන්න පුළුවන්, 
-            // නැත්නම් දැනට මේ සරල ක්‍රමය පාවිච්චි කරමු.
             const updated = await Settings.findOneAndUpdate(
                 { id: id },
                 { $set: settings },
-                { new: true }
+                { new: true, lean: true }
             );
             return res.status(200).json({ success: true, settings: updated });
         }
 
-        return res.status(400).json({ error: "Invalid Action!" });
-
     } catch (e) {
-        return res.status(500).json({ error: "Database Error: " + e.message });
+        console.error("DB Error:", e.message);
+        return res.status(500).json({ success: false, error: "Server Busy. Try again!" });
     }
 }
