@@ -1,0 +1,8 @@
+{
+  "name": "zanta-api",
+  "version": "1.0.0",
+  "main": "api/auth.js",
+  "dependencies": {
+    "mongoose": "^8.0.0"
+  }
+}
