@@ -48,10 +48,10 @@ export default async function handler(req, res) {
         const { id, password, action, settings } = req.body;
 
         const user = await Settings.findOne({ id: id });
-        if (!user) return res.status(404).json({ success: false, error: "User not found." });
+        if (!user) return res.status(404).json({ success: false, error: "User not found!" });
 
         if (user.password !== password) {
-            return res.status(401).json({ success: false, error: "Invalid Password." });
+            return res.status(401).json({ success: false, error: "Invalid Password!" });
         }
 
         if (action === "login") {
