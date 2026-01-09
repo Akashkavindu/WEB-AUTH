@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
-const axios = require('axios'); // ✅ Signal එක යැවීමට axios අවශ්‍යයි
 
+// MongoDB සම්බන්ධතාවය
 const MONGO_URI = "mongodb+srv://zanta-md:Akashkavindu12345@cluster0.iw4vklq.mongodb.net/test?retryWrites=true&w=majority";
 
 const connectToDatabase = async () => {
@@ -8,7 +8,7 @@ const connectToDatabase = async () => {
     return mongoose.connect(MONGO_URI);
 };
 
-// ✅ Auto Reply support එක සහිත Schema එක
+// Settings Schema එක
 const SettingsSchema = new mongoose.Schema({
     id: String,
     password: { type: String, default: 'not_set' },
@@ -23,12 +23,14 @@ const SettingsSchema = new mongoose.Schema({
     readCmd: String,
     autoVoice: String,
     autoReply: { type: String, default: 'false' },
-    autoReplies: { type: Array, default: [] } // [{keyword: 'hi', reply: 'hello'}]
+    autoReplies: { type: Array, default: [] } 
 }, { collection: 'settings', strict: false });
 
 const Settings = mongoose.models.Settings || mongoose.model('Settings', SettingsSchema);
 
+// Vercel Serverless Function Handler
 export default async function handler(req, res) {
+    // CORS Headers (වෙබ් Dashboard එකේ සිට වැඩ කිරීමට)
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -41,25 +43,29 @@ export default async function handler(req, res) {
         await connectToDatabase();
         const { id, password, action, settings, botUrl } = req.body; 
 
+        // පරිශීලකයා පරීක්ෂා කිරීම
         const user = await Settings.findOne({ id: id });
         if (!user) return res.status(404).json({ success: false, error: "User not found!" });
         if (user.password !== password) return res.status(401).json({ success: false, error: "Invalid Password." });
 
+        // Login Action
         if (action === "login") {
             return res.status(200).json({ success: true, settings: user });
         }
 
+        // Update Settings Action
         if (action === "updateSettings") {
             // 1. Database එක Update කිරීම
             await Settings.updateOne({ id: id }, { $set: settings });
 
-            // 2. ✅ බොට්ගේ RAM එක Update කිරීමට Signal එක යැවීම
+            // 2. බොට්ගේ RAM එක Refresh කිරීමට Signal එක යැවීම (Axios වෙනුවට Native Fetch භාවිතා කර ඇත)
             if (botUrl) {
+                const signalUrl = `${botUrl.replace(/\/$/, "")}/update-cache?id=${id}`;
                 try {
-                    // බොට්ගේ URL එකට GET request එකක් යවනවා id එකත් එක්ක
-                    await axios.get(`${botUrl.replace(/\/$/, "")}/update-cache?id=${id}`);
+                    // Node 18+ වල fetch සෘජුවම වැඩ කරයි. Axios අවශ්‍ය නැත.
+                    await fetch(signalUrl).catch(e => console.log("Bot unreachable"));
                 } catch (err) {
-                    console.error("⚠️ Bot cache update failed (Offline)");
+                    console.error("Signal Sync Failed");
                 }
             }
 
@@ -71,4 +77,3 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: e.message });
     }
 }
-
