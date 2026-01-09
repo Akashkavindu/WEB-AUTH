@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
         const user = await Settings.findOne({ id: id });
         if (!user) return res.status(404).json({ success: false, error: "User not found!" });
-        if (user.password !== password) return res.status(401).json({ success: false, error: "Invalid Password!" });
+        if (user.password !== password) return res.status(401).json({ success: false, error: "Invalid Password." });
 
         if (action === "login") {
             return res.status(200).json({ success: true, settings: user });
@@ -71,3 +71,4 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: e.message });
     }
 }
+
